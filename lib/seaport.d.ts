@@ -702,6 +702,15 @@ export declare class OpenSeaPort {
         wyAsset: WyvernAsset;
         schemaName: WyvernSchemaName;
     }, retries?: number): Promise<boolean>;
+    fulfillOrderData({ order, accountAddress, recipientAddress, referrerAddress }: {
+        order: Order;
+        accountAddress: string;
+        recipientAddress?: string;
+        referrerAddress?: string;
+    }): Promise<{
+        data: string;
+        buyOrder: Order;
+    }>;
     /**
      * Get the listing and expiration time paramters for a new order
      * @param expirationTimestamp Timestamp to expire the order, or 0 for non-expiring
@@ -727,4 +736,5 @@ export declare class OpenSeaPort {
     private _dispatch;
     private _confirmTransaction;
     private _pollCallbackForConfirmation;
+    private _createAtomicMatchParams;
 }
