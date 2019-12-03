@@ -2673,7 +2673,7 @@ export class OpenSeaPort {
   }
 
   // new func
-  public async fulfillOrderData(
+  public async createAtomicMatchData(
     { order, accountAddress, recipientAddress, referrerAddress }:
     { order: Order;
       accountAddress: string;
@@ -2691,6 +2691,29 @@ export class OpenSeaPort {
     const metadata = this._getMetadata(order, referrerAddress)
     const data = await this._createAtomicMatchParams({ buy, sell, accountAddress, metadata })
     return {data, buyOrder: buy}
+  }
+
+  // new func
+  public async createApproveOrderData(order: UnsignedOrder) {
+    const accountAddress = order.maker
+    const includeInOrderBook = true
+
+    this._dispatch(EventType.ApproveOrder, { order, accountAddress })
+
+    const data = this._wyvernProtocol.wyvernExchange.approveOrder_.getABIEncodedTransactionData(
+      [order.exchange, order.maker, order.taker, order.feeRecipient, order.target, order.staticTarget, order.paymentToken],
+      [order.makerRelayerFee, order.takerRelayerFee, order.makerProtocolFee, order.takerProtocolFee, order.basePrice, order.extra, order.listingTime, order.expirationTime, order.salt],
+      order.feeMethod,
+      order.side,
+      order.saleKind,
+      order.howToCall,
+      order.calldata,
+      order.replacementPattern,
+      order.staticExtradata,
+      includeInOrderBook
+    )
+
+    return data
   }
 
   /**
