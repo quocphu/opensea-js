@@ -2725,6 +2725,123 @@ export class OpenSeaPort {
     }
   }
 
+  // new func
+  public async createAtomicMatchData(
+    { order, accountAddress, recipientAddress, referrerAddress }:
+    { order: Order;
+      accountAddress: string;
+      recipientAddress?: string;
+      referrerAddress?: string; }
+  ) {
+    const matchingOrder = this._makeMatchingOrder({
+    order,
+    accountAddress,
+    recipientAddress: recipientAddress || accountAddress
+  })
+
+    const { buy, sell } = assignOrdersToSides(order, matchingOrder)
+
+    const metadata = this._getMetadata(order, referrerAddress)
+    const data = await this._createAtomicMatchParams({ buy, sell, accountAddress, metadata })
+    return {data, buyOrder: buy}
+  }
+
+  // new func
+  public async createApproveOrderData(order: UnsignedOrder) {
+    const accountAddress = order.maker
+    const includeInOrderBook = true
+
+    this._dispatch(EventType.ApproveOrder, { order, accountAddress })
+
+    const data = this._wyvernProtocol.wyvernExchange.approveOrder_.getABIEncodedTransactionData(
+      [order.exchange, order.maker, order.taker, order.feeRecipient, order.target, order.staticTarget, order.paymentToken],
+      [order.makerRelayerFee, order.takerRelayerFee, order.makerProtocolFee, order.takerProtocolFee, order.basePrice, order.extra, order.listingTime, order.expirationTime, order.salt],
+      order.feeMethod,
+      order.side,
+      order.saleKind,
+      order.howToCall,
+      order.calldata,
+      order.replacementPattern,
+      order.staticExtradata,
+      includeInOrderBook
+    )
+
+    return data
+  }
+
+  // new func
+  /**
+   * Create a sell order to auction an asset.
+   * Will throw a 'You do not own enough of this asset' error if the maker doesn't have the asset or not enough of it to sell the specific `quantity`.
+   * If the user hasn't approved access to the token yet, this will emit `ApproveAllAssets` (or `ApproveAsset` if the contract doesn't support approve-all) before asking for approval.
+   * @param param0 __namedParameters Object
+   * @param tokenId DEPRECATED: Token ID. Use `asset` instead.
+   * @param tokenAddress DEPRECATED: Address of the token's contract. Use `asset` instead.
+   * @param asset The asset to trade
+   * @param accountAddress Address of the maker's wallet
+   * @param startAmount Price of the asset at the start of the auction. Units are in the amount of a token above the token's decimal places (integer part). For example, for ether, expected units are in ETH, not wei.
+   * @param endAmount Optional price of the asset at the end of its expiration time. Units are in the amount of a token above the token's decimal places (integer part). For example, for ether, expected units are in ETH, not wei.
+   * @param quantity The number of assets to sell (if fungible or semi-fungible). Defaults to 1. In units, not base units, e.g. not wei.
+   * @param expirationTime Expiration time for the order, in seconds. An expiration time of 0 means "never expire."
+   * @param waitForHighestBid If set to true, this becomes an English auction that increases in price for every bid. The highest bid wins when the auction expires, as long as it's at least `startAmount`. `expirationTime` must be > 0.
+   * @param paymentTokenAddress Address of the ERC-20 token to accept in return. If undefined or null, uses Ether.
+   * @param extraBountyBasisPoints Optional basis points (1/100th of a percent) to reward someone for referring the fulfillment of this order
+   * @param buyerAddress Optional address that's allowed to purchase this item. If specified, no other address will be able to take the order, unless its value is the null address.
+   * @param buyerEmail Optional email of the user that's allowed to purchase this item. If specified, a user will have to verify this email before being able to take the order.
+   * @param schemaName The Wyvern schema name corresponding to the asset type
+   */
+  public async createSellOrderWithoutSignature(
+    { tokenId, tokenAddress, asset, accountAddress, listingTime, startAmount, endAmount, quantity = 1, expirationTime = 0, waitForHighestBid = false, paymentTokenAddress, extraBountyBasisPoints = 0, buyerAddress, buyerEmail, schemaName = WyvernSchemaName.ERC721 }:
+    { tokenId?: string;
+      tokenAddress?: string;
+      asset: Asset;
+      accountAddress: string;
+      listingTime: string,
+      startAmount: number;
+      endAmount?: number;
+      quantity?: number;
+      expirationTime?: number;
+      waitForHighestBid?: boolean;
+      paymentTokenAddress?: string;
+      extraBountyBasisPoints?: number;
+      buyerAddress?: string;
+      buyerEmail?: string;
+      schemaName?: WyvernSchemaName; }
+  ) {
+
+    if (!asset && tokenAddress && tokenId) {
+      onDeprecated("Use `asset` instead of `tokenAddress`")
+      asset = { tokenAddress, tokenId }
+    }
+
+    const order = await this._makeSellOrder({
+      asset,
+      quantity,
+      accountAddress,
+      startAmount,
+      endAmount,
+      expirationTime,
+      waitForHighestBid,
+      paymentTokenAddress: paymentTokenAddress || NULL_ADDRESS,
+      extraBountyBasisPoints,
+      buyerAddress: buyerAddress || NULL_ADDRESS,
+      schemaName
+    })
+    order.listingTime = makeBigNumber(listingTime)
+    order.expirationTime = makeBigNumber(0)
+    order.salt = makeBigNumber(1)
+    const hashedOrder = {
+      ...order,
+      hash: getOrderHash(order)
+    }
+
+    // order.v = makeBigNumber(0)
+    // order.r ='0x0000000000000000000000000000000000000000000000000000000000000000'
+    // order.s ='0x0000000000000000000000000000000000000000000000000000000000000000'
+
+    return hashedOrder
+  }
+
   /**
    * Get the listing and expiration time paramters for a new order
    * @param expirationTimestamp Timestamp to expire the order, or 0 for non-expiring
@@ -3044,4 +3161,57 @@ export class OpenSeaPort {
       return testResolve(initialRetries)
     })
   }
+
+  private async _createAtomicMatchParams(
+    { buy, sell, accountAddress, metadata = NULL_BLOCK_HASH }:
+    { buy: Order; sell: Order; accountAddress: string; metadata?: string }
+  ) {
+    let shouldValidateBuy = true
+    let shouldValidateSell = true
+
+    if (sell.maker.toLowerCase() == accountAddress.toLowerCase()) {
+      // USER IS THE SELLER, only validate the buy order
+      await this._sellOrderValidationAndApprovals({ order: sell, accountAddress })
+      shouldValidateSell = false
+
+    } else if (buy.maker.toLowerCase() == accountAddress.toLowerCase()) {
+      // USER IS THE BUYER, only validate the sell order
+      await this._buyOrderValidationAndApprovals({ order: buy, counterOrder: sell, accountAddress })
+      shouldValidateBuy = false
+    } else {
+      // User is neither - matching service
+    }
+
+    await this._validateMatch({ buy, sell, accountAddress, shouldValidateBuy, shouldValidateSell })
+
+    this._dispatch(EventType.MatchOrders, { buy, sell, accountAddress, matchMetadata: metadata })
+
+    const args: WyvernAtomicMatchParameters = [
+      [buy.exchange, buy.maker, buy.taker, buy.feeRecipient, buy.target,
+      buy.staticTarget, buy.paymentToken, sell.exchange, sell.maker, sell.taker, sell.feeRecipient, sell.target, sell.staticTarget, sell.paymentToken],
+      [buy.makerRelayerFee, buy.takerRelayerFee, buy.makerProtocolFee, buy.takerProtocolFee, buy.basePrice, buy.extra, buy.listingTime, buy.expirationTime, buy.salt, sell.makerRelayerFee, sell.takerRelayerFee, sell.makerProtocolFee, sell.takerProtocolFee, sell.basePrice, sell.extra, sell.listingTime, sell.expirationTime, sell.salt],
+      [buy.feeMethod, buy.side, buy.saleKind, buy.howToCall, sell.feeMethod, sell.side, sell.saleKind, sell.howToCall],
+      buy.calldata,
+      sell.calldata,
+      buy.replacementPattern,
+      sell.replacementPattern,
+      buy.staticExtradata,
+      sell.staticExtradata,
+      [
+        buy.v || 0,
+        sell.v || 0
+      ],
+      [
+        buy.r || NULL_BLOCK_HASH,
+        buy.s || NULL_BLOCK_HASH,
+        sell.r || NULL_BLOCK_HASH,
+        sell.s || NULL_BLOCK_HASH,
+        metadata
+      ]
+    ]
+
+    const data = this._wyvernProtocol.wyvernExchange.atomicMatch_.getABIEncodedTransactionData(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10])
+    return data
+  }
+
 }

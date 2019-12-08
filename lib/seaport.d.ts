@@ -1,7 +1,7 @@
 import * as Web3 from 'web3';
 import { Schema } from 'wyvern-schemas/dist/types';
 import { OpenSeaAPI } from './api';
-import { OpenSeaAPIConfig, OrderSide, UnhashedOrder, Order, UnsignedOrder, PartialReadonlyContractAbi, EventType, EventData, OpenSeaAsset, WyvernSchemaName, OpenSeaFungibleToken, WyvernAsset, OpenSeaFees, Asset, OpenSeaAssetContract } from './types';
+import { FeeMethod, HowToCall, OpenSeaAPIConfig, OrderSide, SaleKind, UnhashedOrder, Order, UnsignedOrder, PartialReadonlyContractAbi, EventType, EventData, OpenSeaAsset, WyvernSchemaName, OpenSeaFungibleToken, WyvernAsset, OpenSeaFees, Asset, OpenSeaAssetContract, WyvernNFTAsset, WyvernFTAsset } from './types';
 import { BigNumber } from 'bignumber.js';
 import { EventSubscription } from 'fbemitter';
 export declare class OpenSeaPort {
@@ -718,6 +718,87 @@ export declare class OpenSeaPort {
         wyAsset: WyvernAsset;
         schemaName: WyvernSchemaName;
     }, retries?: number): Promise<boolean>;
+    createAtomicMatchData({ order, accountAddress, recipientAddress, referrerAddress }: {
+        order: Order;
+        accountAddress: string;
+        recipientAddress?: string;
+        referrerAddress?: string;
+    }): Promise<{
+        data: string;
+        buyOrder: Order;
+    }>;
+    createApproveOrderData(order: UnsignedOrder): Promise<string>;
+    /**
+     * Create a sell order to auction an asset.
+     * Will throw a 'You do not own enough of this asset' error if the maker doesn't have the asset or not enough of it to sell the specific `quantity`.
+     * If the user hasn't approved access to the token yet, this will emit `ApproveAllAssets` (or `ApproveAsset` if the contract doesn't support approve-all) before asking for approval.
+     * @param param0 __namedParameters Object
+     * @param tokenId DEPRECATED: Token ID. Use `asset` instead.
+     * @param tokenAddress DEPRECATED: Address of the token's contract. Use `asset` instead.
+     * @param asset The asset to trade
+     * @param accountAddress Address of the maker's wallet
+     * @param startAmount Price of the asset at the start of the auction. Units are in the amount of a token above the token's decimal places (integer part). For example, for ether, expected units are in ETH, not wei.
+     * @param endAmount Optional price of the asset at the end of its expiration time. Units are in the amount of a token above the token's decimal places (integer part). For example, for ether, expected units are in ETH, not wei.
+     * @param quantity The number of assets to sell (if fungible or semi-fungible). Defaults to 1. In units, not base units, e.g. not wei.
+     * @param expirationTime Expiration time for the order, in seconds. An expiration time of 0 means "never expire."
+     * @param waitForHighestBid If set to true, this becomes an English auction that increases in price for every bid. The highest bid wins when the auction expires, as long as it's at least `startAmount`. `expirationTime` must be > 0.
+     * @param paymentTokenAddress Address of the ERC-20 token to accept in return. If undefined or null, uses Ether.
+     * @param extraBountyBasisPoints Optional basis points (1/100th of a percent) to reward someone for referring the fulfillment of this order
+     * @param buyerAddress Optional address that's allowed to purchase this item. If specified, no other address will be able to take the order, unless its value is the null address.
+     * @param buyerEmail Optional email of the user that's allowed to purchase this item. If specified, a user will have to verify this email before being able to take the order.
+     * @param schemaName The Wyvern schema name corresponding to the asset type
+     */
+    createSellOrderWithoutSignature({ tokenId, tokenAddress, asset, accountAddress, listingTime, startAmount, endAmount, quantity, expirationTime, waitForHighestBid, paymentTokenAddress, extraBountyBasisPoints, buyerAddress, buyerEmail, schemaName }: {
+        tokenId?: string;
+        tokenAddress?: string;
+        asset: Asset;
+        accountAddress: string;
+        listingTime: string;
+        startAmount: number;
+        endAmount?: number;
+        quantity?: number;
+        expirationTime?: number;
+        waitForHighestBid?: boolean;
+        paymentTokenAddress?: string;
+        extraBountyBasisPoints?: number;
+        buyerAddress?: string;
+        buyerEmail?: string;
+        schemaName?: WyvernSchemaName;
+    }): Promise<{
+        hash: string;
+        feeMethod: FeeMethod;
+        side: OrderSide;
+        saleKind: SaleKind;
+        howToCall: HowToCall;
+        quantity: BigNumber;
+        makerReferrerFee: BigNumber;
+        waitingForBestCounterOrder: boolean;
+        metadata: {
+            asset?: WyvernNFTAsset | WyvernFTAsset | undefined;
+            bundle?: import("src/types").WyvernBundle | undefined;
+            schema: WyvernSchemaName;
+            referrerAddress?: string | undefined;
+        };
+        exchange: string;
+        maker: string;
+        taker: string;
+        makerRelayerFee: BigNumber;
+        takerRelayerFee: BigNumber;
+        makerProtocolFee: BigNumber;
+        takerProtocolFee: BigNumber;
+        feeRecipient: string;
+        target: string;
+        calldata: string;
+        replacementPattern: string;
+        staticTarget: string;
+        staticExtradata: string;
+        paymentToken: string;
+        basePrice: BigNumber;
+        extra: BigNumber;
+        listingTime: BigNumber;
+        expirationTime: BigNumber;
+        salt: BigNumber;
+    }>;
     /**
      * Get the listing and expiration time paramters for a new order
      * @param expirationTimestamp Timestamp to expire the order, or 0 for non-expiring
@@ -748,4 +829,5 @@ export declare class OpenSeaPort {
     private _getClientsForRead;
     private _confirmTransaction;
     private _pollCallbackForConfirmation;
+    private _createAtomicMatchParams;
 }
