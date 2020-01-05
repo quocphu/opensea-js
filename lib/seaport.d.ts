@@ -748,7 +748,7 @@ export declare class OpenSeaPort {
      * @param buyerEmail Optional email of the user that's allowed to purchase this item. If specified, a user will have to verify this email before being able to take the order.
      * @param schemaName The Wyvern schema name corresponding to the asset type
      */
-    createSellOrderWithoutSignature({ tokenId, tokenAddress, asset, accountAddress, listingTime, startAmount, endAmount, quantity, expirationTime, waitForHighestBid, paymentTokenAddress, extraBountyBasisPoints, buyerAddress, buyerEmail, schemaName }: {
+    createSellOrderWithoutSignature({ tokenId, tokenAddress, asset, accountAddress, listingTime, startAmount, endAmount, quantity, expirationTime, waitForHighestBid, paymentTokenAddress, extraBountyBasisPoints, buyerAddress, buyerEmail, schemaName, makerRelayerFee, takerRelayerFee, makerProtocolFee, takerProtocolFee, makerReferrerFee }: {
         tokenId?: string;
         tokenAddress?: string;
         asset: Asset;
@@ -764,6 +764,11 @@ export declare class OpenSeaPort {
         buyerAddress?: string;
         buyerEmail?: string;
         schemaName?: WyvernSchemaName;
+        makerRelayerFee?: number;
+        takerRelayerFee?: number;
+        makerProtocolFee?: number;
+        takerProtocolFee?: number;
+        makerReferrerFee?: number;
     }): Promise<{
         hash: string;
         feeMethod: FeeMethod;

@@ -2791,7 +2791,7 @@ export class OpenSeaPort {
    * @param schemaName The Wyvern schema name corresponding to the asset type
    */
   public async createSellOrderWithoutSignature(
-    { tokenId, tokenAddress, asset, accountAddress, listingTime, startAmount, endAmount, quantity = 1, expirationTime = 0, waitForHighestBid = false, paymentTokenAddress, extraBountyBasisPoints = 0, buyerAddress, buyerEmail, schemaName = WyvernSchemaName.ERC721 }:
+    { tokenId, tokenAddress, asset, accountAddress, listingTime, startAmount, endAmount, quantity = 1, expirationTime = 0, waitForHighestBid = false, paymentTokenAddress, extraBountyBasisPoints = 0, buyerAddress, buyerEmail, schemaName = WyvernSchemaName.ERC721, makerRelayerFee, takerRelayerFee, makerProtocolFee, takerProtocolFee, makerReferrerFee}:
     { tokenId?: string;
       tokenAddress?: string;
       asset: Asset;
@@ -2806,7 +2806,12 @@ export class OpenSeaPort {
       extraBountyBasisPoints?: number;
       buyerAddress?: string;
       buyerEmail?: string;
-      schemaName?: WyvernSchemaName; }
+      schemaName?: WyvernSchemaName;
+      makerRelayerFee?: number;
+      takerRelayerFee?: number;
+      makerProtocolFee?: number;
+      takerProtocolFee?: number;
+      makerReferrerFee?: number; }
   ) {
 
     if (!asset && tokenAddress && tokenId) {
@@ -2830,6 +2835,30 @@ export class OpenSeaPort {
     order.listingTime = makeBigNumber(listingTime)
     order.expirationTime = makeBigNumber(0)
     order.salt = makeBigNumber(1)
+
+    // Modify fee if given
+    // makerRelayerFee,
+    // takerRelayerFee,
+    // makerProtocolFee: makeBigNumber(0),
+    // takerProtocolFee: makeBigNumber(0),
+    // makerReferrerFee: makeBigNumber(sellerBountyBPS),
+
+    if (makerRelayerFee != 0 && makerRelayerFee) {
+      order.makerRelayerFee = makeBigNumber(makerRelayerFee)
+    }
+    if (takerRelayerFee != 0 && takerRelayerFee) {
+      order.takerRelayerFee = makeBigNumber(takerRelayerFee)
+    }
+    if (makerProtocolFee != 0 && makerProtocolFee) {
+      order.makerProtocolFee = makeBigNumber(makerProtocolFee)
+    }
+    if (takerProtocolFee != 0 && takerProtocolFee) {
+      order.takerProtocolFee = makeBigNumber(takerProtocolFee)
+    }
+    if (makerReferrerFee != 0 && makerReferrerFee) {
+      order.makerReferrerFee = makeBigNumber(makerReferrerFee)
+    }
+
     const hashedOrder = {
       ...order,
       hash: getOrderHash(order)
